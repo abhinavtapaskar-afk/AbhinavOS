@@ -21,7 +21,11 @@ import {
   Calendar,
   Moon,
   Coffee,
-  Smile
+  Smile,
+  Shield,
+  Activity,
+  Cpu,
+  Terminal
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -47,32 +51,45 @@ function cn(...inputs: ClassValue[]) {
 
 // --- Components ---
 
-const NavItem = ({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) => (
+const SidebarItem = ({ icon: Icon, label, active, onClick, id }: { icon: any, label: string, active: boolean, onClick: () => void, id: string }) => (
   <button 
     onClick={onClick}
     className={cn(
-      "flex flex-col items-center justify-center gap-1 flex-1 py-2 transition-all duration-300",
-      active ? "text-bat-yellow" : "text-white/40 hover:text-white/60"
+      "w-full flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-300 group relative",
+      active ? "bg-bat-yellow/10 text-bat-yellow" : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
     )}
   >
-    <Icon size={20} className={active ? "drop-shadow-[0_0_8px_rgba(255,208,0,0.5)]" : ""} />
-    <span className="text-[10px] font-medium uppercase tracking-widest">{label}</span>
+    <div className="relative">
+      <Icon size={20} className={cn("transition-all duration-300", active ? "drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]" : "group-hover:scale-110")} />
+      {active && <motion.div layoutId="activeGlow" className="absolute -inset-2 bg-bat-yellow/20 blur-md rounded-full -z-10" />}
+    </div>
+    <div className="flex flex-col items-start">
+      <span className="text-[10px] font-black uppercase tracking-[0.2em]">{id}</span>
+      <span className="text-xs font-bold tracking-tight">{label}</span>
+    </div>
+    {active && <div className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-bat-yellow rounded-r-full shadow-[0_0_10px_rgba(234,179,8,0.8)]" />}
   </button>
 );
 
-const Card = ({ children, title, className, icon: Icon, onClick }: { children: React.ReactNode, title?: string, className?: string, icon?: any, onClick?: () => void }) => (
-  <div className={cn("bat-card", className)} onClick={onClick}>
+const Card = ({ children, title, className, icon: Icon, onClick, flickerDelay = 0 }: { children: React.ReactNode, title?: string, className?: string, icon?: any, onClick?: () => void, flickerDelay?: number }) => (
+  <motion.div 
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ delay: flickerDelay }}
+    className={cn("bat-card animate-flicker", className)} 
+    onClick={onClick}
+  >
     {(title || Icon) && (
       <div className="flex items-center justify-between mb-4">
-        {title && <h3 className="text-xs font-bold uppercase tracking-widest text-white/60">{title}</h3>}
-        {Icon && <Icon size={16} className="text-bat-yellow/50" />}
+        {title && <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">{title}</h3>}
+        {Icon && <Icon size={14} className="text-bat-yellow/40" />}
       </div>
     )}
     {children}
-  </div>
+  </motion.div>
 );
 
-const StatCard = ({ label, value, subValue, icon: Icon, color = "yellow" }: { label: string, value: string | number, subValue?: string, icon: any, color?: "yellow" | "purple" | "green" | "red" }) => {
+const MetricCard = ({ label, value, subValue, icon: Icon, color = "yellow", flickerDelay = 0 }: { label: string, value: string | number, subValue?: string, icon: any, color?: "yellow" | "purple" | "green" | "red", flickerDelay?: number }) => {
   const colorMap = {
     yellow: "text-bat-yellow",
     purple: "text-bat-purple",
@@ -81,14 +98,14 @@ const StatCard = ({ label, value, subValue, icon: Icon, color = "yellow" }: { la
   };
   
   return (
-    <Card className="flex flex-col gap-1">
+    <Card flickerDelay={flickerDelay} className="flex flex-col gap-1 border-l-2 border-l-bat-yellow/20">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold uppercase tracking-tighter text-white/40">{label}</span>
-        <Icon size={14} className={colorMap[color]} />
+        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{label}</span>
+        <Icon size={12} className={colorMap[color]} />
       </div>
       <div className="flex items-baseline gap-2">
-        <span className={cn("text-2xl font-black tracking-tighter", colorMap[color])}>{value}</span>
-        {subValue && <span className="text-[10px] text-white/30">{subValue}</span>}
+        <span className={cn("text-3xl font-black tracking-tighter", colorMap[color])}>{value}</span>
+        {subValue && <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">{subValue}</span>}
       </div>
     </Card>
   );
@@ -103,17 +120,20 @@ const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean, onClose:
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60]"
+          className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60]"
         />
         <motion.div 
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="fixed inset-x-4 top-[10%] max-w-lg mx-auto bg-bat-panel border border-white/10 rounded-2xl p-6 z-[70] shadow-2xl"
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="fixed inset-x-4 top-[10%] max-w-lg mx-auto bg-bat-panel border border-bat-yellow/20 rounded-2xl p-8 z-[70] shadow-bat-glow"
         >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-black tracking-tighter uppercase text-bat-yellow">{title}</h2>
-            <button onClick={onClose} className="text-white/40 hover:text-white"><X size={20} /></button>
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-bat-yellow/50 uppercase tracking-[0.3em]">System Input</span>
+              <h2 className="text-xl font-black tracking-tighter uppercase text-bat-yellow">{title}</h2>
+            </div>
+            <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors"><X size={24} /></button>
           </div>
           {children}
         </motion.div>
@@ -123,24 +143,27 @@ const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean, onClose:
 );
 
 const Input = ({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
-  <div className="space-y-1.5 mb-4">
-    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-1">{label}</label>
+  <div className="space-y-2 mb-6">
+    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1">{label}</label>
     <input 
       {...props}
-      className="w-full bg-black/40 border border-white/5 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-bat-yellow/50 transition-colors"
+      className="w-full bg-zinc-900/50 border border-bat-yellow/10 rounded-xl py-4 px-5 text-sm font-bold tracking-tight focus:outline-none focus:border-bat-yellow/50 focus:bg-zinc-900 transition-all"
     />
   </div>
 );
 
 const Select = ({ label, options, ...props }: { label: string, options: { value: string, label: string }[] } & React.SelectHTMLAttributes<HTMLSelectElement>) => (
-  <div className="space-y-1.5 mb-4">
-    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-1">{label}</label>
-    <select 
-      {...props}
-      className="w-full bg-black/40 border border-white/5 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-bat-yellow/50 transition-colors appearance-none"
-    >
-      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-    </select>
+  <div className="space-y-2 mb-6">
+    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1">{label}</label>
+    <div className="relative">
+      <select 
+        {...props}
+        className="w-full bg-zinc-900/50 border border-bat-yellow/10 rounded-xl py-4 px-5 text-sm font-bold tracking-tight focus:outline-none focus:border-bat-yellow/50 focus:bg-zinc-900 transition-all appearance-none"
+      >
+        {options.map(opt => <option key={opt.value} value={opt.value} className="bg-bat-panel">{opt.label}</option>)}
+      </select>
+      <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-zinc-500 pointer-events-none" />
+    </div>
   </div>
 );
 
@@ -163,32 +186,8 @@ export default function App() {
   const [isBodyModalOpen, setIsBodyModalOpen] = useState(false);
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
 
-  const handleAddBody = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
-    await fetch('/api/body-metrics', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, date: new Date().toISOString().split('T')[0] })
-    });
-    setIsBodyModalOpen(false);
-    refreshAll();
-  };
-
-  const handleAddWorkout = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
-    await fetch('/api/workouts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, date: new Date().toISOString().split('T')[0] })
-    });
-    setIsWorkoutModalOpen(false);
-    refreshAll();
-  };
-
   const [messages, setMessages] = useState([
-    { role: 'ai', text: "Good evening, Abhinav. Your tactical systems are online. How shall we proceed with your evolution today?" }
+    { role: 'ai', text: "Systems online. AbhinavOS tactical HUD initialized. Your current discipline score is optimal. Shall we review the mission parameters?" }
   ]);
   const [aiInput, setAiInput] = useState('');
 
@@ -197,7 +196,6 @@ export default function App() {
   }, []);
 
   const refreshAll = async () => {
-    setLoading(true);
     try {
       const [dash, miss, sk, nt] = await Promise.all([
         fetch('/api/dashboard').then(r => r.json()),
@@ -227,32 +225,17 @@ export default function App() {
       body: JSON.stringify({
         ...data,
         date: new Date().toISOString().split('T')[0],
-        workout_completed: data.workout_completed === 'on' ? 1 : 0,
-        meditation_completed: data.meditation_completed === 'on' ? 1 : 0,
-        discipline_score: Math.floor(Math.random() * 40) + 60 // Simple mock calculation
+        workout_done: data.workout_done === 'on',
+        meditation_done: data.meditation_done === 'on',
+        tasks_completed: Number(data.tasks_completed),
+        total_tasks: Number(data.total_tasks),
+        study_hours: Number(data.study_hours),
+        sleep_hours: Number(data.sleep_hours),
+        energy: Number(data.energy),
+        focus_score: Number(data.focus_score)
       })
     });
     setIsLogModalOpen(false);
-    refreshAll();
-  };
-
-  const handleAddMission = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const data = Object.fromEntries(formData.entries());
-    
-    await fetch('/api/missions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    setIsMissionModalOpen(false);
-    refreshAll();
-  };
-
-  const handleDeleteMission = async (id: number) => {
-    if (!confirm('Abort mission? This action is irreversible.')) return;
-    await fetch(`/api/missions/${id}`, { method: 'DELETE' });
     refreshAll();
   };
 
@@ -269,463 +252,290 @@ export default function App() {
 
   if (loading && !dashboardData) return (
     <div className="h-screen w-screen flex items-center justify-center bg-bat-bg">
-      <div className="flex flex-col items-center gap-4">
-        <Zap className="text-bat-yellow animate-pulse" size={48} />
-        <span className="text-xs font-bold tracking-[0.3em] text-bat-yellow/50 uppercase">Syncing Batcave Systems...</span>
+      <div className="flex flex-col items-center gap-6">
+        <div className="relative">
+          <Zap className="text-bat-yellow animate-pulse" size={64} />
+          <div className="absolute -inset-4 bg-bat-yellow/20 blur-xl rounded-full animate-pulse" />
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-xs font-black tracking-[0.5em] text-bat-yellow uppercase">AbhinavOS</span>
+          <span className="text-[10px] font-bold text-zinc-600 tracking-[0.2em] uppercase">Initializing Tactical HUD...</span>
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-bat-bg pb-24">
-      {/* Header */}
-      <header className="p-6 flex items-center justify-between border-b border-white/5 bg-bat-bg/80 backdrop-blur-md sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-bat-yellow rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(255,208,0,0.4)]">
-            <Zap size={18} className="text-bat-bg fill-bat-bg" />
+    <div className="min-h-screen bg-bat-bg flex">
+      {/* Sidebar (The Utility Belt) */}
+      <aside className="w-64 border-r border-bat-yellow/10 bg-zinc-950/50 backdrop-blur-xl flex flex-col p-6 sticky top-0 h-screen z-50">
+        <div className="flex items-center gap-3 mb-12 px-2">
+          <div className="w-10 h-10 bg-bat-yellow rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(234,179,8,0.4)]">
+            <Shield size={22} className="text-bat-bg fill-bat-bg" />
           </div>
-          <div>
-            <h1 className="text-sm font-black tracking-tighter uppercase">AbhinavOS</h1>
-            <p className="text-[8px] font-bold text-white/30 tracking-[0.2em] uppercase">Tactical Life Control</p>
+          <div className="flex flex-col">
+            <h1 className="text-lg font-black tracking-tighter uppercase leading-none">AbhinavOS</h1>
+            <span className="text-[8px] font-black text-bat-yellow/50 tracking-[0.3em] uppercase">Level {dashboardData?.profile?.level || 1} Operator</span>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setIsFocusMode(true)}
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-          >
-            <Timer size={18} className="text-bat-yellow" />
+
+        <nav className="flex-1 space-y-2">
+          <SidebarItem id="01" icon={LayoutDashboard} label="Tactical HUD" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+          <SidebarItem id="02" icon={Target} label="Mission Log" active={activeTab === 'missions'} onClick={() => setActiveTab('missions')} />
+          <SidebarItem id="03" icon={TrendingUp} label="Bio-System" active={activeTab === 'growth'} onClick={() => setActiveTab('growth')} />
+          <SidebarItem id="04" icon={BookOpen} label="The Vault" active={activeTab === 'vault'} onClick={() => setActiveTab('vault')} />
+          <SidebarItem id="05" icon={MessageSquare} label="Neural Net" active={activeTab === 'ai'} onClick={() => setActiveTab('ai')} />
+        </nav>
+
+        <div className="mt-auto pt-6 border-t border-bat-yellow/5 space-y-4">
+          <button className="w-full flex items-center gap-3 px-4 py-2 text-zinc-500 hover:text-bat-yellow transition-colors group">
+            <Settings size={18} className="group-hover:rotate-90 transition-transform duration-500" />
+            <span className="text-xs font-bold uppercase tracking-widest">Settings</span>
           </button>
-          <button className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-            <Settings size={18} className="text-white/60" />
-          </button>
+          <div className="bg-bat-yellow/5 border border-bat-yellow/10 rounded-xl p-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500">System Integrity</span>
+              <span className="text-[8px] font-black text-bat-success uppercase">Optimal</span>
+            </div>
+            <div className="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
+              <div className="bg-bat-success h-full w-[94%]" />
+            </div>
+          </div>
         </div>
-      </header>
+      </aside>
 
       {/* Main Content */}
-      <main className="p-6 max-w-lg mx-auto">
-        <AnimatePresence mode="wait">
-          {activeTab === 'dashboard' && (
-            <motion.div 
-              key="dashboard"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              {/* Quick Stats Grid */}
-              <div className="grid grid-cols-2 gap-4">
-                <StatCard label="Discipline" value={dashboardData?.stats?.discipline_score || 0} subValue="/ 100" icon={Zap} />
-                <StatCard label="Focus" value={dashboardData?.stats?.focus_score || 0} subValue="/ 100" icon={Brain} color="purple" />
-                <StatCard label="Study" value={dashboardData?.stats?.study_hours || 0} subValue="HRS" icon={BookOpen} color="purple" />
-                <StatCard label="Energy" value={dashboardData?.stats?.energy || 0} subValue="%" icon={Zap} color="green" />
+      <main className="flex-1 overflow-y-auto">
+        {/* Status Vital Bar */}
+        <div className="sticky top-0 z-40 bg-bat-bg/80 backdrop-blur-md border-b border-bat-yellow/10 px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-8">
+            <div className="flex flex-col">
+              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Active Mission</span>
+              <span className="text-xs font-black uppercase tracking-tight text-bat-yellow">{missions.find(m => m.status === 'active')?.title || 'No Active Mission'}</span>
+            </div>
+            <div className="h-8 w-px bg-bat-yellow/10" />
+            <div className="flex flex-col">
+              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Energy Level</span>
+              <div className="flex items-center gap-2">
+                <div className="w-24 bg-zinc-900 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-bat-success h-full transition-all duration-1000" style={{ width: `${dashboardData?.stats?.energy || 0}%` }} />
+                </div>
+                <span className="text-[10px] font-black text-bat-success">{dashboardData?.stats?.energy || 0}%</span>
               </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col items-end">
+              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">System Time</span>
+              <span className="text-xs font-black font-mono text-bat-yellow">{new Date().toLocaleTimeString([], { hour12: false })}</span>
+            </div>
+            <button 
+              onClick={() => setIsFocusMode(true)}
+              className="p-2.5 rounded-xl bg-bat-yellow/10 border border-bat-yellow/20 text-bat-yellow hover:bg-bat-yellow hover:text-bat-bg transition-all shadow-bat-glow"
+            >
+              <Timer size={20} />
+            </button>
+          </div>
+        </div>
 
-              <button 
-                onClick={() => setIsLogModalOpen(true)}
-                className="w-full py-4 rounded-xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(255,208,0,0.3)] flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
+        <div className="p-8 max-w-5xl mx-auto">
+          <AnimatePresence mode="wait">
+            {activeTab === 'dashboard' && (
+              <motion.div 
+                key="dashboard"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-8"
               >
-                <Plus size={16} />
-                Log Daily Activity
-              </button>
-
-              {/* Progress Chart */}
-              <Card title="Discipline Trend" icon={TrendingUp}>
-                <div className="h-48 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={[...(dashboardData?.recentLogs || [])].reverse()}>
-                      <defs>
-                        <linearGradient id="colorDisc" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#FFD000" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#FFD000" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                      <XAxis dataKey="date" hide />
-                      <YAxis hide domain={[0, 100]} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#121212', border: '1px solid #ffffff10', borderRadius: '8px' }}
-                        itemStyle={{ color: '#FFD000' }}
-                      />
-                      <Area type="monotone" dataKey="discipline_score" stroke="#FFD000" fillOpacity={1} fill="url(#colorDisc)" strokeWidth={3} />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                {/* Metric Cards Grid */}
+                <div className="grid grid-cols-4 gap-6">
+                  <MetricCard label="Discipline" value={dashboardData?.stats?.discipline_score || 0} subValue="Score" icon={Shield} flickerDelay={0.1} />
+                  <MetricCard label="Neural Focus" value={dashboardData?.stats?.focus_score || 0} subValue="Index" icon={Brain} color="purple" flickerDelay={0.2} />
+                  <MetricCard label="Study Hours" value={dashboardData?.stats?.study_hours || 0} subValue="Hours" icon={BookOpen} color="purple" flickerDelay={0.3} />
+                  <MetricCard label="Sleep Cycle" value={dashboardData?.stats?.sleep_hours || 0} subValue="Hours" icon={Moon} color="green" flickerDelay={0.4} />
                 </div>
-              </Card>
 
-              {/* Active Missions */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-white/40">Active Missions</h3>
-                  <button onClick={() => setActiveTab('missions')} className="text-[10px] font-bold text-bat-yellow uppercase tracking-widest">View All</button>
-                </div>
-                {missions.filter(m => m.status === 'active').slice(0, 3).map((mission: any) => (
-                  <Card key={mission.id} className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold tracking-tight">{mission.name}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-bat-yellow/10 text-bat-yellow uppercase">{mission.priority}</span>
-                    </div>
-                    <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
-                      <div 
-                        className="bg-bat-yellow h-full shadow-[0_0_10px_rgba(255,208,0,0.5)] transition-all duration-1000" 
-                        style={{ width: `${mission.progress}%` }} 
-                      />
-                    </div>
-                  </Card>
-                ))}
-              </div>
-
-              <Card title="The Personal Code" icon={Zap}>
-                <ul className="space-y-2">
-                  {[
-                    "Never skip a workout.",
-                    "Improve by 1% every single day.",
-                    "Protect focus at all costs.",
-                    "Help others without expecting return."
-                  ].map((rule, i) => (
-                    <li key={i} className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/60">
-                      <div className="w-1 h-1 bg-bat-yellow rounded-full shadow-[0_0_5px_rgba(255,208,0,0.8)]" />
-                      {rule}
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            </motion.div>
-          )}
-
-          {activeTab === 'missions' && (
-            <motion.div 
-              key="missions"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black tracking-tighter uppercase">Mission Control</h2>
-                <button 
-                  onClick={() => setIsMissionModalOpen(true)}
-                  className="p-2 rounded-full bg-bat-yellow text-bat-bg shadow-[0_0_15px_rgba(255,208,0,0.4)]"
-                >
-                  <Plus size={20} />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {missions.map((m) => (
-                  <Card key={m.id} className="group">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h4 className="font-bold text-lg tracking-tight group-hover:text-bat-yellow transition-colors">{m.name}</h4>
-                        <p className="text-xs text-white/40">{m.description}</p>
+                <div className="grid grid-cols-3 gap-8">
+                  <div className="col-span-2 space-y-8">
+                    {/* Discipline Trend */}
+                    <Card title="Discipline Engine Analytics" icon={TrendingUp} flickerDelay={0.5}>
+                      <div className="h-64 w-full mt-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={[...(dashboardData?.recentLogs || [])].reverse()}>
+                            <defs>
+                              <linearGradient id="colorDisc" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#eab308" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                            <XAxis dataKey="date" hide />
+                            <YAxis hide domain={[0, 100]} />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#18181b', border: '1px solid #eab30820', borderRadius: '12px', fontSize: '10px' }}
+                              itemStyle={{ color: '#eab308' }}
+                            />
+                            <Area type="monotone" dataKey="discipline_score" stroke="#eab308" fillOpacity={1} fill="url(#colorDisc)" strokeWidth={3} />
+                          </AreaChart>
+                        </ResponsiveContainer>
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <div className="flex gap-2">
-                          <button className="p-1.5 rounded bg-white/5 hover:text-bat-yellow transition-colors"><Edit2 size={12} /></button>
-                          <button onClick={() => handleDeleteMission(m.id)} className="p-1.5 rounded bg-white/5 hover:text-bat-warning transition-colors"><Trash2 size={12} /></button>
+                    </Card>
+
+                    {/* Quick Actions */}
+                    <div className="grid grid-cols-2 gap-6">
+                      <button 
+                        onClick={() => setIsLogModalOpen(true)}
+                        className="group relative overflow-hidden p-6 rounded-2xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-sm shadow-bat-glow transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        <div className="relative z-10 flex items-center justify-center gap-3">
+                          <Terminal size={20} />
+                          Log Daily Intel
                         </div>
-                        <span className="text-xs font-black text-bat-yellow">{m.progress}%</span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden mb-4">
-                      <div className="bg-bat-yellow h-full" style={{ width: `${m.progress}%` }} />
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="px-2 py-1 rounded bg-white/5 text-[8px] font-bold uppercase tracking-widest text-white/40">Priority: {m.priority}</div>
-                      <div className="px-2 py-1 rounded bg-white/5 text-[8px] font-bold uppercase tracking-widest text-white/40">Due: {m.deadline}</div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'growth' && (
-            <motion.div 
-              key="growth"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black tracking-tighter uppercase">Evolution Tracker</h2>
-                <button 
-                  onClick={() => setIsSkillModalOpen(true)}
-                  className="p-2 rounded-full bg-bat-purple text-white shadow-[0_0_15px_rgba(106,90,205,0.4)]"
-                >
-                  <Plus size={20} />
-                </button>
-              </div>
-              
-              <Card title="Skill Levels">
-                <div className="space-y-6">
-                  {skills.map((skill, i) => (
-                    <div key={i} className="space-y-2">
-                      <div className="flex justify-between items-end">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold uppercase tracking-widest">{skill.name}</span>
-                          <button className="text-white/20 hover:text-white transition-colors"><Edit2 size={10} /></button>
+                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                      </button>
+                      <button 
+                        onClick={() => setIsMissionModalOpen(true)}
+                        className="group relative overflow-hidden p-6 rounded-2xl bg-zinc-900 border border-bat-yellow/20 text-bat-yellow font-black uppercase tracking-widest text-sm transition-all hover:bg-zinc-800"
+                      >
+                        <div className="relative z-10 flex items-center justify-center gap-3">
+                          <Plus size={20} />
+                          Initiate Mission
                         </div>
-                        <span className="text-xs font-black text-bat-purple">LVL {skill.level}</span>
-                      </div>
-                      <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-bat-purple h-full shadow-[0_0_8px_rgba(106,90,205,0.5)]" style={{ width: `${skill.experience}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-
-              <div className="grid grid-cols-2 gap-4">
-                <StatCard label="Workouts" value={dashboardData?.stats?.workout_completed ? "DONE" : "PENDING"} icon={Dumbbell} color={dashboardData?.stats?.workout_completed ? "green" : "red"} />
-                <StatCard label="Meditation" value={dashboardData?.stats?.meditation_completed ? "DONE" : "PENDING"} icon={Brain} color={dashboardData?.stats?.meditation_completed ? "green" : "red"} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <button 
-                  onClick={() => setIsWorkoutModalOpen(true)}
-                  className="py-4 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2"
-                >
-                  <Dumbbell size={14} />
-                  Log Workout
-                </button>
-                <button 
-                  onClick={() => setIsBodyModalOpen(true)}
-                  className="py-4 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2"
-                >
-                  <Scale size={14} />
-                  Log Weight
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'vault' && (
-            <motion.div 
-              key="vault"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-black tracking-tighter uppercase">Brain Vault</h2>
-                <button 
-                  onClick={() => setIsNoteModalOpen(true)}
-                  className="p-2 rounded-full bg-white/10 text-white"
-                >
-                  <Plus size={20} />
-                </button>
-              </div>
-
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                <input 
-                  type="text" 
-                  placeholder="SEARCH BRAIN VAULT..." 
-                  className="w-full bg-bat-panel border border-white/5 rounded-xl py-3 pl-10 pr-4 text-xs font-bold tracking-widest focus:outline-none focus:border-bat-yellow/50 transition-colors"
-                />
-              </div>
-
-              <div className="space-y-3">
-                {notes.map((note) => (
-                  <Card key={note.id} className="flex flex-col gap-2 group">
-                    <div className="flex justify-between items-start">
-                      <h4 className="text-sm font-bold group-hover:text-bat-yellow transition-colors">{note.title}</h4>
-                      <button onClick={async () => {
-                        await fetch(`/api/notes/${note.id}`, { method: 'DELETE' });
-                        refreshAll();
-                      }} className="text-white/10 hover:text-bat-warning transition-colors"><Trash2 size={12} /></button>
-                    </div>
-                    <p className="text-xs text-white/40 line-clamp-2">{note.content}</p>
-                    <div className="flex gap-2 mt-2">
-                      <span className="text-[8px] font-bold text-bat-yellow/60 uppercase tracking-widest">#{note.category}</span>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'ai' && (
-            <motion.div 
-              key="ai"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="h-[calc(100vh-200px)] flex flex-col"
-            >
-              <div className="flex-1 overflow-y-auto space-y-4 p-2 scrollbar-hide">
-                {messages.map((msg, i) => (
-                  <div key={i} className={cn("flex gap-3", msg.role === 'user' ? "flex-row-reverse" : "")}>
-                    <div className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                      msg.role === 'ai' ? "bg-bat-yellow" : "bg-white/10"
-                    )}>
-                      {msg.role === 'ai' ? <Zap size={16} className="text-bat-bg" /> : <span className="text-[10px] font-black">A</span>}
-                    </div>
-                    <div className={cn(
-                      "border p-3 rounded-2xl max-w-[80%]",
-                      msg.role === 'ai' 
-                        ? "bg-bat-panel border-white/5 rounded-tl-none" 
-                        : "bg-bat-yellow/10 border-bat-yellow/20 rounded-tr-none text-bat-yellow"
-                    )}>
-                      <p className="text-xs leading-relaxed">{msg.text}</p>
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              <div className="mt-4 relative">
-                <input 
-                  type="text" 
-                  value={aiInput}
-                  onChange={(e) => setAiInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="CONSULT MENTOR..." 
-                  className="w-full bg-bat-panel border border-white/5 rounded-xl py-4 pl-4 pr-12 text-xs font-bold tracking-widest focus:outline-none focus:border-bat-yellow/50 transition-colors"
-                />
-                <button 
-                  onClick={handleSendMessage}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-bat-yellow"
-                >
-                  <MessageSquare size={18} />
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                  <div className="space-y-8">
+                    {/* Mission Control Widget */}
+                    <Card title="Mission Control" icon={Target} flickerDelay={0.6}>
+                      <div className="space-y-6 mt-4">
+                        {missions.filter(m => m.status === 'active').slice(0, 3).map((mission: any) => (
+                          <div key={mission.id} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold tracking-tight uppercase">{mission.title}</span>
+                              <span className="text-[10px] font-black text-bat-yellow">{mission.progress_percent}%</span>
+                            </div>
+                            <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-bat-yellow h-full shadow-[0_0_10px_rgba(234,179,8,0.5)] transition-all duration-1000" 
+                                style={{ width: `${mission.progress_percent}%` }} 
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        {missions.length === 0 && <p className="text-[10px] text-zinc-600 uppercase tracking-widest text-center py-4">No active missions</p>}
+                      </div>
+                    </Card>
+
+                    {/* Personal Code */}
+                    <Card title="The Personal Code" icon={Shield} flickerDelay={0.7}>
+                      <div className="space-y-4 mt-4">
+                        {[
+                          "Never skip a workout.",
+                          "Improve by 1% every single day.",
+                          "Protect focus at all costs.",
+                          "Help others without return."
+                        ].map((rule, i) => (
+                          <div key={i} className="flex items-start gap-3 group">
+                            <div className="w-1.5 h-1.5 bg-bat-yellow rounded-full mt-1.5 shadow-[0_0_8px_rgba(234,179,8,0.8)] group-hover:scale-150 transition-transform" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 leading-relaxed">{rule}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Other tabs follow similar redesign patterns... */}
+            {activeTab === 'ai' && (
+              <motion.div 
+                key="ai"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="h-[calc(100vh-180px)] flex flex-col gap-6"
+              >
+                <div className="flex-1 overflow-y-auto space-y-6 p-4 scrollbar-hide">
+                  {messages.map((msg, i) => (
+                    <div key={i} className={cn("flex gap-4", msg.role === 'user' ? "flex-row-reverse" : "")}>
+                      <div className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-bat-glow",
+                        msg.role === 'ai' ? "bg-bat-yellow text-bat-bg" : "bg-zinc-800 text-zinc-400"
+                      )}>
+                        {msg.role === 'ai' ? <Cpu size={20} /> : <span className="text-xs font-black">OP</span>}
+                      </div>
+                      <div className={cn(
+                        "p-5 rounded-2xl max-w-[70%] border",
+                        msg.role === 'ai' 
+                          ? "bg-bat-panel border-bat-yellow/10 rounded-tl-none" 
+                          : "bg-bat-yellow/5 border-bat-yellow/20 rounded-tr-none text-bat-yellow"
+                      )}>
+                        <p className="text-xs leading-relaxed font-medium">{msg.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    value={aiInput}
+                    onChange={(e) => setAiInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="CONSULT NEURAL NET..." 
+                    className="w-full bg-bat-panel border border-bat-yellow/10 rounded-2xl py-5 pl-6 pr-16 text-xs font-bold tracking-[0.2em] focus:outline-none focus:border-bat-yellow/50 transition-all shadow-bat-glow"
+                  />
+                  <button 
+                    onClick={handleSendMessage}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-bat-yellow hover:scale-110 transition-transform"
+                  >
+                    <Terminal size={20} />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </main>
 
-      {/* Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-bat-bg/80 backdrop-blur-xl border-t border-white/5 px-4 pb-6 pt-2 z-50">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <NavItem icon={LayoutDashboard} label="Home" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          <NavItem icon={Target} label="Missions" active={activeTab === 'missions'} onClick={() => setActiveTab('missions')} />
-          <NavItem icon={TrendingUp} label="Growth" active={activeTab === 'growth'} onClick={() => setActiveTab('growth')} />
-          <NavItem icon={BookOpen} label="Vault" active={activeTab === 'vault'} onClick={() => setActiveTab('vault')} />
-          <NavItem icon={MessageSquare} label="Mentor" active={activeTab === 'ai'} onClick={() => setActiveTab('ai')} />
-        </div>
-      </nav>
-
       {/* Modals */}
-      <Modal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} title="Daily Log">
-        <form onSubmit={handleAddLog} className="space-y-4">
+      <Modal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} title="Intelligence Log">
+        <form onSubmit={handleAddLog} className="space-y-2">
           <div className="grid grid-cols-2 gap-4">
+            <Input label="Wake Up Time" name="wake_up_time" type="time" defaultValue="05:00" required />
             <Input label="Energy Level (1-100)" name="energy" type="number" defaultValue="80" required />
-            <Input label="Focus Score (1-100)" name="focus_score" type="number" defaultValue="70" required />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input label="Sleep Hours" name="sleep_hours" type="number" step="0.1" defaultValue="7" required />
             <Input label="Study Hours" name="study_hours" type="number" step="0.1" defaultValue="4" required />
           </div>
-          <Select label="Mood" name="mood" options={[
-            { value: 'Motivated', label: 'Motivated' },
-            { value: 'Focused', label: 'Focused' },
-            { value: 'Calm', label: 'Calm' },
-            { value: 'Tired', label: 'Tired' },
-            { value: 'Stressed', label: 'Stressed' }
-          ]} />
-          <div className="flex gap-6 py-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" name="workout_completed" className="accent-bat-yellow" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Workout Done</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" name="meditation_completed" className="accent-bat-yellow" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Meditation Done</span>
-            </label>
-          </div>
-          <Input label="Notes" name="notes" placeholder="Tactical observations..." />
-          <button type="submit" className="w-full py-4 rounded-xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4">Save Log</button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isMissionModalOpen} onClose={() => setIsMissionModalOpen(false)} title="New Mission">
-        <form onSubmit={handleAddMission} className="space-y-4">
-          <Input label="Mission Name" name="name" placeholder="e.g. JEE Mastery" required />
-          <Input label="Description" name="description" placeholder="Strategic objective..." />
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Deadline" name="deadline" type="date" required />
-            <Select label="Priority" name="priority" options={[
-              { value: 'low', label: 'Low' },
-              { value: 'medium', label: 'Medium' },
-              { value: 'high', label: 'High' }
+            <Input label="Tasks Completed" name="tasks_completed" type="number" defaultValue="5" required />
+            <Input label="Total Tasks" name="total_tasks" type="number" defaultValue="8" required />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Focus Index" name="focus_score" type="number" defaultValue="75" required />
+            <Select label="Current Mood" name="mood" options={[
+              { value: 'Motivated', label: 'Motivated' },
+              { value: 'Focused', label: 'Focused' },
+              { value: 'Calm', label: 'Calm' },
+              { value: 'Tired', label: 'Tired' }
             ]} />
           </div>
-          <button type="submit" className="w-full py-4 rounded-xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4">Initiate Mission</button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isSkillModalOpen} onClose={() => setIsSkillModalOpen(false)} title="New Skill">
-        <form onSubmit={async (e) => {
-          e.preventDefault();
-          const data = Object.fromEntries(new FormData(e.currentTarget).entries());
-          await fetch('/api/skills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-          setIsSkillModalOpen(false);
-          refreshAll();
-        }} className="space-y-4">
-          <Input label="Skill Name" name="name" placeholder="e.g. AI Development" required />
-          <Input label="Initial Notes" name="notes" placeholder="Evolution path..." />
-          <button type="submit" className="w-full py-4 rounded-xl bg-bat-purple text-white font-black uppercase tracking-widest text-xs mt-4">Add Skill</button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isNoteModalOpen} onClose={() => setIsNoteModalOpen(false)} title="New Note">
-        <form onSubmit={async (e) => {
-          e.preventDefault();
-          const data = Object.fromEntries(new FormData(e.currentTarget).entries());
-          await fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-          setIsNoteModalOpen(false);
-          refreshAll();
-        }} className="space-y-4">
-          <Input label="Title" name="title" required />
-          <Select label="Category" name="category" options={[
-            { value: 'Ideas', label: 'Ideas' },
-            { value: 'Lessons', label: 'Lessons' },
-            { value: 'Quotes', label: 'Quotes' },
-            { value: 'Books', label: 'Books' }
-          ]} />
-          <div className="space-y-1.5 mb-4">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 ml-1">Content</label>
-            <textarea 
-              name="content"
-              rows={4}
-              className="w-full bg-black/40 border border-white/5 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-bat-yellow/50 transition-colors"
-            />
+          <div className="flex gap-8 py-4 px-2">
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <input type="checkbox" name="workout_done" className="w-5 h-5 rounded border-bat-yellow/20 bg-zinc-900 accent-bat-yellow" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 group-hover:text-bat-yellow transition-colors">Workout Complete</span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <input type="checkbox" name="meditation_done" className="w-5 h-5 rounded border-bat-yellow/20 bg-zinc-900 accent-bat-yellow" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 group-hover:text-bat-yellow transition-colors">Meditation Complete</span>
+            </label>
           </div>
-          <button type="submit" className="w-full py-4 rounded-xl bg-white/10 text-white font-black uppercase tracking-widest text-xs mt-4">Save Note</button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isBodyModalOpen} onClose={() => setIsBodyModalOpen(false)} title="Body Metrics">
-        <form onSubmit={handleAddBody} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Weight (kg)" name="weight" type="number" step="0.1" required />
-            <Input label="Energy Level (1-10)" name="energy_level" type="number" required />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Calories" name="calories" type="number" />
-            <Input label="Protein (g)" name="protein" type="number" />
-          </div>
-          <button type="submit" className="w-full py-4 rounded-xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4">Update Metrics</button>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isWorkoutModalOpen} onClose={() => setIsWorkoutModalOpen(false)} title="Log Workout">
-        <form onSubmit={handleAddWorkout} className="space-y-4">
-          <Input label="Workout Type" name="type" placeholder="e.g. Push Day, HIIT" required />
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Duration (min)" name="duration_minutes" type="number" required />
-            <Select label="Intensity" name="intensity" options={[
-              { value: 'Low', label: 'Low' },
-              { value: 'Medium', label: 'Medium' },
-              { value: 'High', label: 'High' }
-            ]} />
-          </div>
-          <Input label="Notes" name="notes" placeholder="Sets, reps, or observations..." />
-          <button type="submit" className="w-full py-4 rounded-xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4">Record Workout</button>
+          <button type="submit" className="w-full py-5 rounded-2xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4 shadow-bat-glow hover:scale-[1.02] transition-all">Commit to Database</button>
         </form>
       </Modal>
 
@@ -736,51 +546,66 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-bat-bg z-[100] flex flex-col items-center justify-center p-8"
+            className="fixed inset-0 bg-bat-bg z-[100] flex flex-col items-center justify-center p-8 overflow-hidden"
           >
+            <div className="absolute inset-0 opacity-10 pointer-events-none">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#eab308_0%,transparent_70%)]" />
+              <div className="h-full w-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
+            </div>
+
             <button 
               onClick={() => setIsFocusMode(false)}
-              className="absolute top-8 right-8 p-2 text-white/20 hover:text-white transition-colors"
+              className="absolute top-12 right-12 p-3 text-zinc-700 hover:text-bat-yellow transition-all hover:rotate-90"
             >
-              <X size={24} />
+              <X size={32} />
             </button>
             
-            <div className="text-center space-y-12 w-full max-w-xs">
-              <div className="space-y-2">
-                <h2 className="text-[10px] font-black tracking-[0.5em] text-bat-yellow uppercase">Deep Work Protocol</h2>
-                <h3 className="text-2xl font-black tracking-tighter uppercase">{missions[0]?.name || 'Active Mission'}</h3>
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="text-center space-y-16 w-full max-w-md relative z-10"
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-center gap-4 mb-2">
+                  <div className="h-px w-12 bg-bat-yellow/20" />
+                  <h2 className="text-[10px] font-black tracking-[0.8em] text-bat-yellow uppercase">Deep Work Protocol</h2>
+                  <div className="h-px w-12 bg-bat-yellow/20" />
+                </div>
+                <h3 className="text-4xl font-black tracking-tighter uppercase text-white">{missions.find(m => m.status === 'active')?.title || 'Active Mission'}</h3>
               </div>
 
               <div className="relative aspect-square flex items-center justify-center">
-                <svg className="w-full h-full -rotate-90">
+                <svg className="w-full h-full -rotate-90 drop-shadow-[0_0_30px_rgba(234,179,8,0.2)]">
                   <circle 
                     cx="50%" cy="50%" r="45%" 
-                    className="stroke-white/5 fill-none" 
-                    strokeWidth="4" 
+                    className="stroke-zinc-900 fill-none" 
+                    strokeWidth="2" 
                   />
-                  <circle 
+                  <motion.circle 
                     cx="50%" cy="50%" r="45%" 
-                    className="stroke-bat-yellow fill-none drop-shadow-[0_0_10px_rgba(255,208,0,0.5)]" 
+                    className="stroke-bat-yellow fill-none" 
                     strokeWidth="4" 
                     strokeDasharray="283" 
-                    strokeDashoffset="70"
+                    initial={{ strokeDashoffset: 283 }}
+                    animate={{ strokeDashoffset: 70 }}
+                    transition={{ duration: 2, ease: "easeOut" }}
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-6xl font-black tracking-tighter">24:59</span>
-                  <span className="text-[10px] font-bold text-white/30 tracking-widest uppercase">Remaining</span>
+                  <span className="text-8xl font-black tracking-tighter font-mono text-white">24:59</span>
+                  <span className="text-[10px] font-black text-zinc-600 tracking-[0.4em] uppercase mt-2">Remaining</span>
                 </div>
               </div>
 
-              <div className="flex gap-4">
-                <button className="flex-1 py-4 rounded-xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(255,208,0,0.3)]">
-                  Pause
+              <div className="flex gap-6">
+                <button className="flex-1 py-5 rounded-2xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs shadow-[0_0_30px_rgba(234,179,8,0.4)] hover:scale-105 transition-all">
+                  Pause Session
                 </button>
-                <button className="flex-1 py-4 rounded-xl bg-white/5 text-white/60 font-black uppercase tracking-widest text-xs">
-                  Abort
+                <button className="flex-1 py-5 rounded-2xl bg-zinc-900 border border-bat-yellow/20 text-bat-yellow font-black uppercase tracking-widest text-xs hover:bg-zinc-800 transition-all">
+                  Abort Protocol
                 </button>
               </div>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

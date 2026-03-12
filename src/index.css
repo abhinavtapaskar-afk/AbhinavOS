@@ -4,28 +4,48 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-bat-bg: #0A0A0A;
-  --color-bat-panel: #121212;
-  --color-bat-yellow: #FFD000;
+  --color-bat-bg: #09090b;
+  --color-bat-panel: #18181b;
+  --color-bat-yellow: #eab308;
   --color-bat-purple: #6A5ACD;
   --color-bat-success: #00C853;
   --color-bat-warning: #FF5252;
+
+  --shadow-bat-glow: 0 0 15px rgba(234, 179, 8, 0.15);
 }
 
 @layer base {
   body {
-    @apply bg-bat-bg text-white font-sans antialiased;
+    @apply bg-bat-bg text-zinc-100 font-sans antialiased;
   }
 }
 
-.glow-yellow {
-  box-shadow: 0 0 15px rgba(255, 208, 0, 0.3);
+@keyframes flicker {
+  0% { opacity: 0.1; }
+  5% { opacity: 0.7; }
+  10% { opacity: 0.3; }
+  15% { opacity: 0.9; }
+  20% { opacity: 0.5; }
+  25% { opacity: 1; }
 }
 
-.glow-purple {
-  box-shadow: 0 0 15px rgba(106, 90, 205, 0.3);
+.animate-flicker {
+  animation: flicker 0.5s ease-out forwards;
 }
 
-.bat-card {
-  @apply bg-bat-panel border border-white/5 rounded-xl p-4 transition-all duration-300 hover:border-bat-yellow/30;
+@utility glass-panel {
+  background-color: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(234, 179, 8, 0.1);
+  border-radius: 0.75rem;
+  box-shadow: 0 0 15px rgba(234, 179, 8, 0.15);
+}
+
+@utility bat-card {
+  @apply glass-panel p-4 transition-all duration-300;
+}
+
+.bat-card:hover {
+  border-color: rgba(234, 179, 8, 0.3);
+  box-shadow: 0 0 20px rgba(234, 179, 8, 0.25);
 }

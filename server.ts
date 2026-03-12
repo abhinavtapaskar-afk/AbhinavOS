@@ -11,97 +11,86 @@ const db = new Database("abhinavos.db");
 
 // Initialize Database Schema
 db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
+  CREATE TABLE IF NOT EXISTS profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
-    email TEXT UNIQUE,
-    personal_code TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS missions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    description TEXT,
-    progress INTEGER DEFAULT 0,
-    deadline TEXT,
-    priority TEXT,
-    status TEXT DEFAULT 'active'
-  );
-
-  CREATE TABLE IF NOT EXISTS mission_tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    mission_id INTEGER,
-    task TEXT NOT NULL,
-    completed INTEGER DEFAULT 0,
-    FOREIGN KEY(mission_id) REFERENCES missions(id) ON DELETE CASCADE
+    personal_code TEXT,
+    level INTEGER DEFAULT 1,
+    xp INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS daily_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     date TEXT UNIQUE,
-    energy INTEGER,
-    discipline_score INTEGER,
-    focus_score INTEGER,
-    sleep_hours REAL,
-    study_hours REAL,
-    workout_completed INTEGER,
-    meditation_completed INTEGER,
+    sleep_hours REAL DEFAULT 0,
+    energy INTEGER DEFAULT 50,
     mood TEXT,
-    notes TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS skills (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE,
-    level INTEGER DEFAULT 1,
-    experience INTEGER DEFAULT 0,
-    notes TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS skill_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    skill_id INTEGER,
-    duration_minutes INTEGER,
-    date TEXT,
+    focus_score INTEGER DEFAULT 0,
+    study_hours REAL DEFAULT 0,
+    workout_done INTEGER DEFAULT 0,
+    meditation_done INTEGER DEFAULT 0,
+    wake_up_time TEXT,
+    tasks_completed INTEGER DEFAULT 0,
+    total_tasks INTEGER DEFAULT 0,
     notes TEXT,
-    FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE
+    discipline_score INTEGER DEFAULT 0
   );
 
-  CREATE TABLE IF NOT EXISTS notes (
+  CREATE TABLE IF NOT EXISTS missions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT,
+    title TEXT NOT NULL,
+    description TEXT,
+    progress_percent INTEGER DEFAULT 0,
+    deadline TEXT,
+    priority TEXT,
+    status TEXT DEFAULT 'active'
+  );
+
+  CREATE TABLE IF NOT EXISTS brain_vault (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
     content TEXT,
     category TEXT,
     tags TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
-  CREATE TABLE IF NOT EXISTS body_metrics (
+  CREATE TABLE IF NOT EXISTS skills (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT UNIQUE,
-    weight REAL,
-    calories INTEGER,
-    protein INTEGER,
-    energy_level INTEGER
-  );
-
-  CREATE TABLE IF NOT EXISTS workouts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT,
-    type TEXT,
-    duration_minutes INTEGER,
-    intensity TEXT,
+    skill_name TEXT NOT NULL,
+    level INTEGER DEFAULT 1,
+    total_practice_minutes INTEGER DEFAULT 0,
     notes TEXT
   );
-
-  CREATE TABLE IF NOT EXISTS focus_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    mission_id INTEGER,
-    duration_minutes INTEGER,
-    date TEXT,
-    FOREIGN KEY(mission_id) REFERENCES missions(id) ON DELETE CASCADE
-  );
 `);
+
+// --- Discipline Engine Logic ---
+function calculateDisciplineScore(log: any) {
+  let score = 0;
+  
+  // 1. Wake up time (Target: before 06:00)
+  if (log.wake_up_time) {
+    const [hours, minutes] = log.wake_up_time.split(':').map(Number);
+    if (hours < 6) score += 25;
+    else if (hours === 6 && minutes === 0) score += 20;
+    else if (hours < 8) score += 10;
+  }
+
+  // 2. Study hours (Target: 6hrs)
+  const studyScore = Math.min((log.study_hours / 6) * 30, 30);
+  score += studyScore;
+
+  // 3. Workout (Binary)
+  if (log.workout_done) score += 25;
+
+  // 4. Task completion percentage
+  if (log.total_tasks > 0) {
+    const taskScore = (log.tasks_completed / log.total_tasks) * 20;
+    score += taskScore;
+  }
+
+  return Math.round(score);
+}
 
 async function startServer() {
   const app = express();
@@ -109,83 +98,77 @@ async function startServer() {
 
   app.use(express.json());
 
-  // --- DASHBOARD ---
+  // --- DASHBOARD HUD ---
   app.get("/api/dashboard", (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const stats = db.prepare("SELECT * FROM daily_logs WHERE date = ?").get(today);
     const recentLogs = db.prepare("SELECT * FROM daily_logs ORDER BY date DESC LIMIT 14").all();
-    const activeMissions = db.prepare("SELECT * FROM missions WHERE status = 'active'").all();
-    const skills = db.prepare("SELECT * FROM skills").all();
+    const activeMissions = db.prepare("SELECT * FROM missions WHERE status = 'active' ORDER BY priority DESC LIMIT 3").all();
+    const profile = db.prepare("SELECT * FROM profiles LIMIT 1").get() || { name: "Abhinav", level: 1 };
     
-    res.json({ stats, recentLogs, activeMissions, skills });
+    res.json({ stats, recentLogs, activeMissions, profile });
+  });
+
+  // --- DAILY LOGS (Single Source of Truth) ---
+  app.post("/api/daily-log", (req, res) => {
+    const log = req.body;
+    const discipline_score = calculateDisciplineScore(log);
+    
+    const stmt = db.prepare(`
+      INSERT INTO daily_logs (
+        date, sleep_hours, energy, mood, focus_score, study_hours, 
+        workout_done, meditation_done, wake_up_time, tasks_completed, 
+        total_tasks, notes, discipline_score
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(date) DO UPDATE SET
+        sleep_hours=excluded.sleep_hours,
+        energy=excluded.energy,
+        mood=excluded.mood,
+        focus_score=excluded.focus_score,
+        study_hours=excluded.study_hours,
+        workout_done=excluded.workout_done,
+        meditation_done=excluded.meditation_done,
+        wake_up_time=excluded.wake_up_time,
+        tasks_completed=excluded.tasks_completed,
+        total_tasks=excluded.total_tasks,
+        notes=excluded.notes,
+        discipline_score=excluded.discipline_score
+    `);
+    
+    stmt.run(
+      log.date, log.sleep_hours, log.energy, log.mood, log.focus_score, 
+      log.study_hours, log.workout_done ? 1 : 0, log.meditation_done ? 1 : 0, 
+      log.wake_up_time, log.tasks_completed, log.total_tasks, log.notes, 
+      discipline_score
+    );
+    
+    res.json({ success: true, discipline_score });
   });
 
   // --- MISSIONS ---
   app.get("/api/missions", (req, res) => {
     const missions = db.prepare("SELECT * FROM missions").all();
-    const missionsWithTasks = missions.map(m => ({
-      ...m,
-      tasks: db.prepare("SELECT * FROM mission_tasks WHERE mission_id = ?").all(m.id)
-    }));
-    res.json(missionsWithTasks);
+    res.json(missions);
   });
 
   app.post("/api/missions", (req, res) => {
-    const { name, description, deadline, priority } = req.body;
-    const stmt = db.prepare("INSERT INTO missions (name, description, deadline, priority) VALUES (?, ?, ?, ?)");
-    const result = stmt.run(name, description, deadline, priority);
+    const { title, description, deadline, priority } = req.body;
+    const stmt = db.prepare("INSERT INTO missions (title, description, deadline, priority) VALUES (?, ?, ?, ?)");
+    const result = stmt.run(title, description, deadline, priority);
     res.json({ id: result.lastInsertRowid });
   });
 
-  app.put("/api/missions/:id", (req, res) => {
-    const { name, description, progress, deadline, priority, status } = req.body;
-    const stmt = db.prepare("UPDATE missions SET name=?, description=?, progress=?, deadline=?, priority=?, status=? WHERE id=?");
-    stmt.run(name, description, progress, deadline, priority, status, req.params.id);
-    res.json({ success: true });
+  // --- BRAIN VAULT ---
+  app.get("/api/notes", (req, res) => {
+    const notes = db.prepare("SELECT * FROM brain_vault ORDER BY created_at DESC").all();
+    res.json(notes);
   });
 
-  app.delete("/api/missions/:id", (req, res) => {
-    db.prepare("DELETE FROM missions WHERE id = ?").run(req.params.id);
-    res.json({ success: true });
-  });
-
-  // --- MISSION TASKS ---
-  app.post("/api/missions/:id/tasks", (req, res) => {
-    const { task } = req.body;
-    const stmt = db.prepare("INSERT INTO mission_tasks (mission_id, task) VALUES (?, ?)");
-    const result = stmt.run(req.params.id, task);
-    res.json({ id: result.lastInsertRowid });
-  });
-
-  app.put("/api/tasks/:id", (req, res) => {
-    const { completed } = req.body;
-    db.prepare("UPDATE mission_tasks SET completed = ? WHERE id = ?").run(completed ? 1 : 0, req.params.id);
-    res.json({ success: true });
-  });
-
-  // --- DAILY LOGS ---
-  app.get("/api/daily-logs", (req, res) => {
-    const logs = db.prepare("SELECT * FROM daily_logs ORDER BY date DESC").all();
-    res.json(logs);
-  });
-
-  app.post("/api/daily-log", (req, res) => {
-    const { date, energy, discipline_score, focus_score, sleep_hours, study_hours, workout_completed, meditation_completed, mood, notes } = req.body;
-    const stmt = db.prepare(`
-      INSERT INTO daily_logs (date, energy, discipline_score, focus_score, sleep_hours, study_hours, workout_completed, meditation_completed, mood, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(date) DO UPDATE SET
-        energy=excluded.energy,
-        discipline_score=excluded.discipline_score,
-        focus_score=excluded.focus_score,
-        sleep_hours=excluded.sleep_hours,
-        study_hours=excluded.study_hours,
-        workout_completed=excluded.workout_completed,
-        meditation_completed=excluded.meditation_completed,
-        mood=excluded.mood,
-        notes=excluded.notes
-    `);
-    stmt.run(date, energy, discipline_score, focus_score, sleep_hours, study_hours, workout_completed, meditation_completed, mood, notes);
+  app.post("/api/notes", (req, res) => {
+    const { title, content, category, tags } = req.body;
+    const stmt = db.prepare("INSERT INTO brain_vault (title, content, category, tags) VALUES (?, ?, ?, ?)");
+    stmt.run(title, content, category, tags);
     res.json({ success: true });
   });
 
@@ -193,37 +176,6 @@ async function startServer() {
   app.get("/api/skills", (req, res) => {
     const skills = db.prepare("SELECT * FROM skills").all();
     res.json(skills);
-  });
-
-  app.post("/api/skills", (req, res) => {
-    const { name, notes } = req.body;
-    const stmt = db.prepare("INSERT INTO skills (name, notes) VALUES (?, ?)");
-    const result = stmt.run(name, notes);
-    res.json({ id: result.lastInsertRowid });
-  });
-
-  app.put("/api/skills/:id", (req, res) => {
-    const { level, experience, notes } = req.body;
-    db.prepare("UPDATE skills SET level=?, experience=?, notes=? WHERE id=?").run(level, experience, notes, req.params.id);
-    res.json({ success: true });
-  });
-
-  app.delete("/api/skills/:id", (req, res) => {
-    db.prepare("DELETE FROM skills WHERE id = ?").run(req.params.id);
-    res.json({ success: true });
-  });
-
-  // --- BRAIN VAULT ---
-  app.get("/api/notes", (req, res) => {
-    const notes = db.prepare("SELECT * FROM notes ORDER BY created_at DESC").all();
-    res.json(notes);
-  });
-
-  app.post("/api/notes", (req, res) => {
-    const { title, content, category, tags } = req.body;
-    const stmt = db.prepare("INSERT INTO notes (title, content, category, tags) VALUES (?, ?, ?, ?)");
-    stmt.run(title, content, category, tags);
-    res.json({ success: true });
   });
 
   app.delete("/api/notes/:id", (req, res) => {
