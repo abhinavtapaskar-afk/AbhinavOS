@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './lib/supabaseClient';
+import { supabase, isSupabaseConfigured } from './lib/supabaseClient';
+import { Auth } from './components/Auth';
+import { getAiResponse } from './services/geminiService';
 import { 
   LayoutDashboard, 
   Target, 
@@ -26,7 +28,8 @@ import {
   Shield,
   Activity,
   Cpu,
-  Terminal
+  Terminal,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -173,11 +176,16 @@ const Select = ({ label, options, ...props }: { label: string, options: { value:
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isFocusMode, setIsFocusMode] = useState(false);
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<any>({
+    stats: { discipline_score: 0, focus_score: 0, study_hours: 0, sleep_hours: 0, energy: 0 },
+    recentLogs: [],
+    profile: { level: 1 }
+  });
   const [missions, setMissions] = useState<any[]>([]);
   const [skills, setSkills] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
 
   // Form States
@@ -191,13 +199,36 @@ export default function App() {
   ]);
   const [aiInput, setAiInput] = useState('');
 
+  const calculateDisciplineScore = (data: any) => {
+    let score = 0;
+    if (data.wake_up_time === '05:00') score += 20;
+    score += Math.min(40, (Number(data.study_hours) / 6) * 40);
+    if (data.workout_done === 'on') score += 20;
+    const taskRatio = Number(data.total_tasks) > 0 ? Number(data.tasks_completed) / Number(data.total_tasks) : 0;
+    score += Math.min(20, taskRatio * 20);
+    return Math.round(score);
+  };
+
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setError("SYSTEM ERROR: Security Keys Missing. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+      setLoading(false);
+      return;
+    }
+
     const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      if (user) {
-        refreshAll(user.id);
-      } else {
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        setUser(user);
+        if (user) {
+          await refreshAll(user.id);
+        } else {
+          setLoading(false);
+        }
+      } catch (err: any) {
+        console.error('Auth error:', err);
+        setError(`AUTH ERROR: ${err.message || 'Unknown error'}`);
         setLoading(false);
       }
     };
@@ -225,23 +256,23 @@ export default function App() {
       setSkills(skRes.data || []);
       setNotes(ntRes.data || []);
       
-      // Calculate dashboard stats from logs
       const recentLogs = logRes.data || [];
       const latestLog = recentLogs[0] || {};
       
       setDashboardData({
         stats: {
           discipline_score: latestLog.discipline_score || 0,
-          focus_score: latestLog.energy_level * 10 || 0, // Mock focus from energy
+          focus_score: (latestLog.energy_level || 0) * 10,
           study_hours: latestLog.study_hours || 0,
           sleep_hours: latestLog.sleep_hours || 0,
-          energy: latestLog.energy_level * 10 || 0
+          energy: (latestLog.energy_level || 0) * 10
         },
         recentLogs: recentLogs,
         profile: { level: 1 }
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Supabase fetch error:', err);
+      setError(`DATA ERROR: ${err.message || 'Failed to fetch tactical data'}`);
     } finally {
       setLoading(false);
     }
@@ -263,18 +294,18 @@ export default function App() {
         energy_level: Math.floor(Number(data.energy) / 10),
         mood: data.mood as string,
         workout_status: data.workout_done === 'on',
-        wake_up_on_time: data.wake_up_time === '05:00', // Example logic
+        wake_up_on_time: data.wake_up_time === '05:00',
         tasks_completed: Number(data.tasks_completed),
         total_tasks: Number(data.total_tasks),
-        discipline_score: 85 // Placeholder for calculation
+        discipline_score: calculateDisciplineScore(data)
       }]);
 
       if (error) throw error;
       setIsLogModalOpen(false);
       refreshAll();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Insert error:', err);
-      alert('Failed to save log. Check console.');
+      alert(`Failed to save log: ${err.message}`);
     }
   };
 
@@ -297,8 +328,9 @@ export default function App() {
       if (error) throw error;
       setIsMissionModalOpen(false);
       refreshAll();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`Mission deployment failed: ${err.message}`);
     }
   };
 
@@ -318,8 +350,31 @@ export default function App() {
       if (error) throw error;
       setIsSkillModalOpen(false);
       refreshAll();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`Skill acquisition failed: ${err.message}`);
+    }
+  };
+
+  const handleSaveNote = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!user) return alert("Unauthorized");
+    const formData = new FormData(e.currentTarget);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+      const { error } = await supabase.from('brain_vault').insert([{
+        user_id: user.id,
+        content: data.content as string,
+        category: data.category as string,
+        tags: (data.tags as string).split(',').map(t => t.trim())
+      }]);
+      if (error) throw error;
+      setIsNoteModalOpen(false);
+      refreshAll();
+    } catch (err: any) {
+      console.error(err);
+      alert(`Intel storage failed: ${err.message}`);
     }
   };
 
@@ -329,12 +384,45 @@ export default function App() {
     setMessages(prev => [...prev, userMsg]);
     setAiInput('');
     
-    setTimeout(() => {
-      setMessages(prev => [...prev, { role: 'ai', text: "Analyzing tactical data... Based on your current progress in 'JEE Mastery', I recommend a 90-minute deep work session focusing on Physics. Your energy levels are optimal for complex problem solving." }]);
-    }, 1000);
+    try {
+      const response = await getAiResponse(aiInput, {
+        stats: dashboardData?.stats,
+        missions,
+        skills
+      });
+      setMessages(prev => [...prev, { role: 'ai', text: response }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'ai', text: "Neural Net error. Connection lost." }]);
+    }
   };
 
-  if (loading && !dashboardData) return (
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  if (error) return (
+    <div className="h-screen w-screen flex items-center justify-center bg-bat-bg p-6">
+      <div className="max-w-md w-full bat-card border-bat-warning/50 animate-flicker flex flex-col items-center text-center gap-6">
+        <div className="relative">
+          <AlertTriangle className="text-bat-warning" size={64} />
+          <div className="absolute -inset-4 bg-bat-warning/20 blur-xl rounded-full" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-black text-bat-warning uppercase tracking-tighter">System Critical Error</h2>
+          <p className="text-xs font-bold text-zinc-400 leading-relaxed font-mono">{error}</p>
+        </div>
+        <button 
+          onClick={() => window.location.reload()}
+          className="w-full py-4 rounded-xl bg-bat-warning text-bat-bg font-black uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(239,68,68,0.4)]"
+        >
+          Reboot System
+        </button>
+      </div>
+    </div>
+  );
+
+  if (loading) return (
     <div className="h-screen w-screen flex items-center justify-center bg-bat-bg">
       <div className="flex flex-col items-center gap-6">
         <div className="relative">
@@ -348,6 +436,8 @@ export default function App() {
       </div>
     </div>
   );
+
+  if (!user) return <Auth />;
 
   return (
     <div className="min-h-screen bg-bat-bg flex">
@@ -372,6 +462,13 @@ export default function App() {
         </nav>
 
         <div className="mt-auto pt-6 border-t border-bat-yellow/5 space-y-4">
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-2 text-zinc-500 hover:text-bat-warning transition-colors group"
+          >
+            <X size={18} className="group-hover:rotate-90 transition-transform duration-500" />
+            <span className="text-xs font-bold uppercase tracking-widest">Logout</span>
+          </button>
           <button className="w-full flex items-center gap-3 px-4 py-2 text-zinc-500 hover:text-bat-yellow transition-colors group">
             <Settings size={18} className="group-hover:rotate-90 transition-transform duration-500" />
             <span className="text-xs font-bold uppercase tracking-widest">Settings</span>
@@ -445,24 +542,30 @@ export default function App() {
                     {/* Discipline Trend */}
                     <Card title="Discipline Engine Analytics" icon={TrendingUp} flickerDelay={0.5}>
                       <div className="h-[300px] w-full mt-4">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={[...(dashboardData?.recentLogs || [])].reverse()}>
-                            <defs>
-                              <linearGradient id="colorDisc" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#eab308" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                            <XAxis dataKey="date" hide />
-                            <YAxis hide domain={[0, 100]} />
-                            <Tooltip 
-                              contentStyle={{ backgroundColor: '#18181b', border: '1px solid #eab30820', borderRadius: '12px', fontSize: '10px' }}
-                              itemStyle={{ color: '#eab308' }}
-                            />
-                            <Area type="monotone" dataKey="discipline_score" stroke="#eab308" fillOpacity={1} fill="url(#colorDisc)" strokeWidth={3} />
-                          </AreaChart>
-                        </ResponsiveContainer>
+                        {dashboardData?.recentLogs?.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={[...(dashboardData?.recentLogs || [])].reverse()}>
+                              <defs>
+                                <linearGradient id="colorDisc" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#eab308" stopOpacity={0.3}/>
+                                  <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                              <XAxis dataKey="date" hide />
+                              <YAxis hide domain={[0, 100]} />
+                              <Tooltip 
+                                contentStyle={{ backgroundColor: '#18181b', border: '1px solid #eab30820', borderRadius: '12px', fontSize: '10px' }}
+                                itemStyle={{ color: '#eab308' }}
+                              />
+                              <Area type="monotone" dataKey="discipline_score" stroke="#eab308" fillOpacity={1} fill="url(#colorDisc)" strokeWidth={3} />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center border border-dashed border-bat-yellow/10 rounded-xl">
+                            <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Awaiting Bio-Data...</span>
+                          </div>
+                        )}
                       </div>
                     </Card>
 
@@ -533,7 +636,130 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* Other tabs follow similar redesign patterns... */}
+            {activeTab === 'missions' && (
+              <motion.div 
+                key="missions"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-6"
+              >
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-black tracking-tighter uppercase text-white">Active Operations</h2>
+                  <button 
+                    onClick={() => setIsMissionModalOpen(true)}
+                    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-[10px] shadow-bat-glow hover:scale-105 transition-all"
+                  >
+                    <Plus size={16} />
+                    New Mission
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {missions.map((mission) => (
+                    <Card key={mission.id} title={mission.category} className="relative group">
+                      <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-lg font-black uppercase tracking-tight text-white">{mission.title}</h3>
+                        <span className={cn(
+                          "px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border",
+                          mission.priority === 'High' ? "border-red-500/50 text-red-500 bg-red-500/10" : "border-bat-yellow/50 text-bat-yellow bg-bat-yellow/10"
+                        )}>
+                          {mission.priority} Priority
+                        </span>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                          <span>Progress</span>
+                          <span className="text-bat-yellow">{mission.progress_percent}%</span>
+                        </div>
+                        <div className="w-full bg-zinc-900 h-2 rounded-full overflow-hidden">
+                          <div 
+                            className="bg-bat-yellow h-full shadow-bat-glow transition-all duration-1000" 
+                            style={{ width: `${mission.progress_percent}%` }} 
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-600 uppercase tracking-widest pt-2">
+                          <Calendar size={12} />
+                          Deadline: {new Date(mission.deadline).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'growth' && (
+              <motion.div 
+                key="growth"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-6"
+              >
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-black tracking-tighter uppercase text-white">Skill Matrix</h2>
+                  <button 
+                    onClick={() => setIsSkillModalOpen(true)}
+                    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-[10px] shadow-bat-glow hover:scale-105 transition-all"
+                  >
+                    <Plus size={16} />
+                    Acquire Skill
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {skills.map((skill) => (
+                    <Card key={skill.id} className="text-center p-8 border-t-2 border-t-bat-yellow/20">
+                      <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-bat-yellow/10">
+                        <Zap size={24} className="text-bat-yellow" />
+                      </div>
+                      <h3 className="text-lg font-black uppercase tracking-tight text-white mb-1">{skill.name}</h3>
+                      <div className="flex items-center justify-center gap-2 mb-4">
+                        <span className="text-[10px] font-black text-bat-yellow uppercase tracking-widest">Level {skill.level}</span>
+                      </div>
+                      <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">
+                        {skill.total_minutes_practiced} Minutes Practiced
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'vault' && (
+              <motion.div 
+                key="vault"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-6"
+              >
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-black tracking-tighter uppercase text-white">The Brain Vault</h2>
+                  <button 
+                    onClick={() => setIsNoteModalOpen(true)}
+                    className="flex items-center gap-2 px-6 py-3 rounded-xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-[10px] shadow-bat-glow hover:scale-105 transition-all"
+                  >
+                    <Plus size={16} />
+                    Store Intel
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {notes.map((note) => (
+                    <Card key={note.id} title={note.category} className="flex flex-col gap-4">
+                      <p className="text-sm text-zinc-300 leading-relaxed italic">"{note.content}"</p>
+                      <div className="flex flex-wrap gap-2 mt-auto">
+                        {note.tags?.map((tag: string) => (
+                          <span key={tag} className="px-2 py-0.5 rounded bg-zinc-900 text-[8px] font-black text-zinc-500 uppercase tracking-widest border border-bat-yellow/5">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
             {activeTab === 'ai' && (
               <motion.div 
                 key="ai"
@@ -644,6 +870,24 @@ export default function App() {
           <Input label="Skill Name" name="name" placeholder="e.g., Quantum Physics" required />
           <Input label="Initial Level" name="level" type="number" defaultValue="1" required />
           <button type="submit" className="w-full py-5 rounded-2xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4 shadow-bat-glow hover:scale-[1.02] transition-all">Register Skill</button>
+        </form>
+      </Modal>
+
+      <Modal isOpen={isNoteModalOpen} onClose={() => setIsNoteModalOpen(false)} title="Store Intel">
+        <form onSubmit={handleSaveNote} className="space-y-4">
+          <div className="space-y-2 mb-6">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1">Intel Content</label>
+            <textarea 
+              name="content"
+              required
+              rows={4}
+              className="w-full bg-zinc-900/50 border border-bat-yellow/10 rounded-xl py-4 px-5 text-sm font-bold tracking-tight focus:outline-none focus:border-bat-yellow/50 focus:bg-zinc-900 transition-all text-white"
+              placeholder="Enter tactical data..."
+            />
+          </div>
+          <Input label="Category" name="category" placeholder="e.g., Strategy" required />
+          <Input label="Tags (comma separated)" name="tags" placeholder="e.g., physics, exam, formula" />
+          <button type="submit" className="w-full py-5 rounded-2xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4 shadow-bat-glow hover:scale-[1.02] transition-all">Commit to Vault</button>
         </form>
       </Modal>
 
