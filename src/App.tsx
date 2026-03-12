@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from './lib/supabaseClient';
 import { 
   LayoutDashboard, 
   Target, 
@@ -177,14 +178,13 @@ export default function App() {
   const [skills, setSkills] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
 
   // Form States
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isMissionModalOpen, setIsMissionModalOpen] = useState(false);
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
-  const [isBodyModalOpen, setIsBodyModalOpen] = useState(false);
-  const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
 
   const [messages, setMessages] = useState([
     { role: 'ai', text: "Systems online. AbhinavOS tactical HUD initialized. Your current discipline score is optimal. Shall we review the mission parameters?" }
@@ -192,23 +192,56 @@ export default function App() {
   const [aiInput, setAiInput] = useState('');
 
   useEffect(() => {
-    refreshAll();
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      if (user) {
+        refreshAll(user.id);
+      } else {
+        setLoading(false);
+      }
+    };
+    checkUser();
   }, []);
 
-  const refreshAll = async () => {
+  const refreshAll = async (userId?: string) => {
+    const targetUserId = userId || user?.id;
+    if (!targetUserId) return;
+
     try {
-      const [dash, miss, sk, nt] = await Promise.all([
-        fetch('/api/dashboard').then(r => r.json()),
-        fetch('/api/missions').then(r => r.json()),
-        fetch('/api/skills').then(r => r.json()),
-        fetch('/api/notes').then(r => r.json())
+      const [missRes, skRes, ntRes, logRes] = await Promise.all([
+        supabase.from('missions').select('*').eq('user_id', targetUserId),
+        supabase.from('skills').select('*').eq('user_id', targetUserId),
+        supabase.from('brain_vault').select('*').eq('user_id', targetUserId),
+        supabase.from('daily_logs').select('*').eq('user_id', targetUserId).order('date', { ascending: false }).limit(7)
       ]);
-      setDashboardData(dash);
-      setMissions(miss);
-      setSkills(sk);
-      setNotes(nt);
+
+      if (missRes.error) throw missRes.error;
+      if (skRes.error) throw skRes.error;
+      if (ntRes.error) throw ntRes.error;
+      if (logRes.error) throw logRes.error;
+
+      setMissions(missRes.data || []);
+      setSkills(skRes.data || []);
+      setNotes(ntRes.data || []);
+      
+      // Calculate dashboard stats from logs
+      const recentLogs = logRes.data || [];
+      const latestLog = recentLogs[0] || {};
+      
+      setDashboardData({
+        stats: {
+          discipline_score: latestLog.discipline_score || 0,
+          focus_score: latestLog.energy_level * 10 || 0, // Mock focus from energy
+          study_hours: latestLog.study_hours || 0,
+          sleep_hours: latestLog.sleep_hours || 0,
+          energy: latestLog.energy_level * 10 || 0
+        },
+        recentLogs: recentLogs,
+        profile: { level: 1 }
+      });
     } catch (err) {
-      console.error(err);
+      console.error('Supabase fetch error:', err);
     } finally {
       setLoading(false);
     }
@@ -216,27 +249,78 @@ export default function App() {
 
   const handleAddLog = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!user) return alert("Unauthorized: No user session found.");
+
     const formData = new FormData(e.currentTarget);
     const data = Object.fromEntries(formData.entries());
     
-    await fetch('/api/daily-log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...data,
+    try {
+      const { error } = await supabase.from('daily_logs').insert([{
+        user_id: user.id,
         date: new Date().toISOString().split('T')[0],
-        workout_done: data.workout_done === 'on',
-        meditation_done: data.meditation_done === 'on',
+        sleep_hours: Number(data.sleep_hours),
+        study_hours: Number(data.study_hours),
+        energy_level: Math.floor(Number(data.energy) / 10),
+        mood: data.mood as string,
+        workout_status: data.workout_done === 'on',
+        wake_up_on_time: data.wake_up_time === '05:00', // Example logic
         tasks_completed: Number(data.tasks_completed),
         total_tasks: Number(data.total_tasks),
-        study_hours: Number(data.study_hours),
-        sleep_hours: Number(data.sleep_hours),
-        energy: Number(data.energy),
-        focus_score: Number(data.focus_score)
-      })
-    });
-    setIsLogModalOpen(false);
-    refreshAll();
+        discipline_score: 85 // Placeholder for calculation
+      }]);
+
+      if (error) throw error;
+      setIsLogModalOpen(false);
+      refreshAll();
+    } catch (err) {
+      console.error('Insert error:', err);
+      alert('Failed to save log. Check console.');
+    }
+  };
+
+  const handleSaveMission = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!user) return alert("Unauthorized");
+    const formData = new FormData(e.currentTarget);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+      const { error } = await supabase.from('missions').insert([{
+        user_id: user.id,
+        title: data.title as string,
+        category: data.category as string,
+        priority: data.priority as string,
+        deadline: data.deadline as string,
+        progress_percent: 0,
+        status: 'active'
+      }]);
+      if (error) throw error;
+      setIsMissionModalOpen(false);
+      refreshAll();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveSkill = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!user) return alert("Unauthorized");
+    const formData = new FormData(e.currentTarget);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+      const { error } = await supabase.from('skills').insert([{
+        user_id: user.id,
+        name: data.name as string,
+        level: Number(data.level),
+        total_minutes_practiced: 0
+      }]);
+      if (error) throw error;
+      setIsSkillModalOpen(false);
+      refreshAll();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleSendMessage = async () => {
@@ -360,7 +444,7 @@ export default function App() {
                   <div className="col-span-2 space-y-8">
                     {/* Discipline Trend */}
                     <Card title="Discipline Engine Analytics" icon={TrendingUp} flickerDelay={0.5}>
-                      <div className="h-64 w-full mt-4">
+                      <div className="h-[300px] w-full mt-4">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={[...(dashboardData?.recentLogs || [])].reverse()}>
                             <defs>
@@ -536,6 +620,30 @@ export default function App() {
             </label>
           </div>
           <button type="submit" className="w-full py-5 rounded-2xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4 shadow-bat-glow hover:scale-[1.02] transition-all">Commit to Database</button>
+        </form>
+      </Modal>
+
+      <Modal isOpen={isMissionModalOpen} onClose={() => setIsMissionModalOpen(false)} title="Initiate Mission">
+        <form onSubmit={handleSaveMission} className="space-y-4">
+          <Input label="Mission Title" name="title" placeholder="e.g., Crack JEE" required />
+          <Input label="Category" name="category" placeholder="e.g., Academics" required />
+          <div className="grid grid-cols-2 gap-4">
+            <Select label="Priority" name="priority" options={[
+              { value: 'High', label: 'High' },
+              { value: 'Medium', label: 'Medium' },
+              { value: 'Low', label: 'Low' }
+            ]} />
+            <Input label="Deadline" name="deadline" type="date" required />
+          </div>
+          <button type="submit" className="w-full py-5 rounded-2xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4 shadow-bat-glow hover:scale-[1.02] transition-all">Deploy Mission</button>
+        </form>
+      </Modal>
+
+      <Modal isOpen={isSkillModalOpen} onClose={() => setIsSkillModalOpen(false)} title="Acquire Skill">
+        <form onSubmit={handleSaveSkill} className="space-y-4">
+          <Input label="Skill Name" name="name" placeholder="e.g., Quantum Physics" required />
+          <Input label="Initial Level" name="level" type="number" defaultValue="1" required />
+          <button type="submit" className="w-full py-5 rounded-2xl bg-bat-yellow text-bat-bg font-black uppercase tracking-widest text-xs mt-4 shadow-bat-glow hover:scale-[1.02] transition-all">Register Skill</button>
         </form>
       </Modal>
 
