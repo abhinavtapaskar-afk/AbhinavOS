@@ -13,8 +13,9 @@ const db = new Database("abhinavos.db");
 db.exec(`
   CREATE TABLE IF NOT EXISTS profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    personal_code TEXT,
+    user_id TEXT UNIQUE,
+    nickname TEXT DEFAULT 'Abhinav',
+    personal_code TEXT, -- JSON array string
     level INTEGER DEFAULT 1,
     xp INTEGER DEFAULT 0
   );
@@ -23,44 +24,38 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     date TEXT UNIQUE,
     sleep_hours REAL DEFAULT 0,
-    energy INTEGER DEFAULT 50,
+    energy_level INTEGER DEFAULT 5, -- 1-10
     mood TEXT,
-    focus_score INTEGER DEFAULT 0,
     study_hours REAL DEFAULT 0,
-    workout_done INTEGER DEFAULT 0,
-    meditation_done INTEGER DEFAULT 0,
-    wake_up_time TEXT,
+    workout_status INTEGER DEFAULT 0, -- 0 or 1
+    wake_up_on_time INTEGER DEFAULT 0,
     tasks_completed INTEGER DEFAULT 0,
     total_tasks INTEGER DEFAULT 0,
-    notes TEXT,
     discipline_score INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS missions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
-    description TEXT,
+    category TEXT,
     progress_percent INTEGER DEFAULT 0,
     deadline TEXT,
-    priority TEXT,
+    priority TEXT CHECK (priority IN ('low', 'medium', 'high')),
     status TEXT DEFAULT 'active'
-  );
-
-  CREATE TABLE IF NOT EXISTS brain_vault (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    content TEXT,
-    category TEXT,
-    tags TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS skills (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    skill_name TEXT NOT NULL,
+    name TEXT NOT NULL,
     level INTEGER DEFAULT 1,
-    total_practice_minutes INTEGER DEFAULT 0,
-    notes TEXT
+    total_minutes_practiced INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS brain_vault (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT NOT NULL,
+    tags TEXT, -- JSON array string
+    category TEXT
   );
 `);
 
@@ -68,22 +63,17 @@ db.exec(`
 function calculateDisciplineScore(log: any) {
   let score = 0;
   
-  // 1. Wake up time (Target: before 06:00)
-  if (log.wake_up_time) {
-    const [hours, minutes] = log.wake_up_time.split(':').map(Number);
-    if (hours < 6) score += 25;
-    else if (hours === 6 && minutes === 0) score += 20;
-    else if (hours < 8) score += 10;
-  }
+  // 1. Wake up on time (20%)
+  if (log.wake_up_on_time) score += 20;
 
-  // 2. Study hours (Target: 6hrs)
-  const studyScore = Math.min((log.study_hours / 6) * 30, 30);
+  // 2. Study hours (40%) - Target: 6hrs
+  const studyScore = Math.min((log.study_hours / 6) * 40, 40);
   score += studyScore;
 
-  // 3. Workout (Binary)
-  if (log.workout_done) score += 25;
+  // 3. Workout completion (20%)
+  if (log.workout_status) score += 20;
 
-  // 4. Task completion percentage
+  // 4. Daily Task completion (20%)
   if (log.total_tasks > 0) {
     const taskScore = (log.tasks_completed / log.total_tasks) * 20;
     score += taskScore;
@@ -116,31 +106,27 @@ async function startServer() {
     
     const stmt = db.prepare(`
       INSERT INTO daily_logs (
-        date, sleep_hours, energy, mood, focus_score, study_hours, 
-        workout_done, meditation_done, wake_up_time, tasks_completed, 
-        total_tasks, notes, discipline_score
+        date, sleep_hours, energy_level, mood, study_hours, 
+        workout_status, wake_up_on_time, tasks_completed, 
+        total_tasks, discipline_score
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(date) DO UPDATE SET
         sleep_hours=excluded.sleep_hours,
-        energy=excluded.energy,
+        energy_level=excluded.energy_level,
         mood=excluded.mood,
-        focus_score=excluded.focus_score,
         study_hours=excluded.study_hours,
-        workout_done=excluded.workout_done,
-        meditation_done=excluded.meditation_done,
-        wake_up_time=excluded.wake_up_time,
+        workout_status=excluded.workout_status,
+        wake_up_on_time=excluded.wake_up_on_time,
         tasks_completed=excluded.tasks_completed,
         total_tasks=excluded.total_tasks,
-        notes=excluded.notes,
         discipline_score=excluded.discipline_score
     `);
     
     stmt.run(
-      log.date, log.sleep_hours, log.energy, log.mood, log.focus_score, 
-      log.study_hours, log.workout_done ? 1 : 0, log.meditation_done ? 1 : 0, 
-      log.wake_up_time, log.tasks_completed, log.total_tasks, log.notes, 
-      discipline_score
+      log.date, log.sleep_hours, log.energy_level, log.mood, 
+      log.study_hours, log.workout_status ? 1 : 0, log.wake_up_on_time ? 1 : 0, 
+      log.tasks_completed, log.total_tasks, discipline_score
     );
     
     res.json({ success: true, discipline_score });
@@ -161,14 +147,14 @@ async function startServer() {
 
   // --- BRAIN VAULT ---
   app.get("/api/notes", (req, res) => {
-    const notes = db.prepare("SELECT * FROM brain_vault ORDER BY created_at DESC").all();
+    const notes = db.prepare("SELECT * FROM brain_vault").all();
     res.json(notes);
   });
 
   app.post("/api/notes", (req, res) => {
-    const { title, content, category, tags } = req.body;
-    const stmt = db.prepare("INSERT INTO brain_vault (title, content, category, tags) VALUES (?, ?, ?, ?)");
-    stmt.run(title, content, category, tags);
+    const { content, category, tags } = req.body;
+    const stmt = db.prepare("INSERT INTO brain_vault (content, category, tags) VALUES (?, ?, ?)");
+    stmt.run(content, category, JSON.stringify(tags));
     res.json({ success: true });
   });
 
