@@ -17,8 +17,21 @@ export const Auth = () => {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
+        
+        if (data.user) {
+          // Auto-create profile for the new user
+          const { error: profileError } = await supabase.from('profiles').insert([
+            { 
+              user_id: data.user.id, 
+              nickname: 'Abhinav', 
+              personal_code: ["Never skip a workout.", "Improve by 1% every day."] 
+            }
+          ]);
+          if (profileError) console.error('Profile creation error:', profileError);
+        }
+        
         alert('Check your email for the confirmation link!');
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });

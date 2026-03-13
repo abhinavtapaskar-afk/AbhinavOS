@@ -216,23 +216,46 @@ export default function App() {
       return;
     }
 
-    const checkUser = async () => {
+    const initAuth = async () => {
       try {
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError) throw authError;
-        setUser(user);
-        if (user) {
-          await refreshAll(user.id);
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          await refreshAll(session.user.id);
         } else {
           setLoading(false);
         }
       } catch (err: any) {
-        console.error('Auth error:', err);
+        console.error('Auth init error:', err);
         setError(`AUTH ERROR: ${err.message || 'Unknown error'}`);
         setLoading(false);
       }
     };
-    checkUser();
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      
+      if (currentUser) {
+        setLoading(true);
+        refreshAll(currentUser.id);
+      } else {
+        setLoading(false);
+        // Reset state on logout
+        setMissions([]);
+        setSkills([]);
+        setNotes([]);
+        setDashboardData({
+          stats: { discipline_score: 0, focus_score: 0, study_hours: 0, sleep_hours: 0, energy: 0 },
+          recentLogs: [],
+          profile: { level: 1 }
+        });
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const refreshAll = async (userId?: string) => {
